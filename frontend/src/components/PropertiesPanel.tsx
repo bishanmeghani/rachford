@@ -72,7 +72,7 @@ function NumberInput({ value, readOnly, onChange, inputStyle }: {
     const [local, setLocal] = useState(String(value));
 
     React.useEffect(() => {
-        setLocal(String(value));
+        setLocal(parseFloat(value.toFixed(6)).toString()); 
     }, [value]);
 
     return (
@@ -279,7 +279,7 @@ export default function PropertiesPanel({ node, components, onNodeDataChange, un
             {nodeType === 'flash' && <>
                 <div style={fieldStyle}>
                     <label style={labelStyle}>Temperature ({us.temperature})</label>
-                    <NumberInput value={fromSI(data.targetP as number ?? 183000, 'pressure', us.pressure)} inputStyle={inputStyle} 
+                    <NumberInput value={fromSI(data.targetT as number ?? 380, 'temperature', us.temperature)} inputStyle={inputStyle} 
                     onChange={(v) => update('targetT', toSI(v, 'temperature', us.temperature))} />
                 </div>
                 <div style={fieldStyle}>
