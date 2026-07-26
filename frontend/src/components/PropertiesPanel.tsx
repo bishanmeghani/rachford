@@ -1,12 +1,14 @@
 import { useState } from 'react';
+import React from 'react';
 import type { Node } from '@xyflow/react'
 import { COMPONENTS_DB } from '../data/componentsDatabase';
-import React from 'react';
+import { fromSI, toSI, DEFAULT_UNITS, type UnitSettings } from '../data/unitsDatabase';
 
 interface PropertiesPanelProps {
     node: Node;
     components: string[];
     onNodeDataChange: (id: string, data: Record<string, unknown>) => void;
+    unitSettings?: UnitSettings;
 }
 
 const inputStyle = {
@@ -88,61 +90,69 @@ function NumberInput({ value, readOnly, onChange, inputStyle }: {
     );
 }
 
-function FeedProperties({ data, components, update }: {
+function FeedProperties({ data, components, update, unitSettings }: {
     data: Record<string, unknown>;
     components: string[];
     update: (key: string, value: unknown) => void;
+    unitSettings: UnitSettings;
 }) {
     const [flowBasis, setFlowBasis] = useState<'mass' | 'molar'>('molar');
     const [compBasis, setCompBasis] = useState<'mass' | 'molar'>('molar');
 
     const molarComposition = (data.molarComposition as Record<string, number>) ?? {};
     const composition = (data.composition as Record<string, number>) ?? {};
-    const molarFlow = data.molarFlow as number ?? 100;
-    const temperature = data.temperature as number ?? 300;
-    const pressure = data.pressure as number ?? 101325;
+    const molarFlowSI = data.molarFlow as number ?? 100;
+    const temperatureSI = data.temperature as number ?? 300;
+    const pressureSI = data.pressure as number ?? 101325;
 
     const avgMW = components.reduce((sum, id) => {
         return sum + (molarComposition[id] ?? 0) * (COMPONENTS_DB[id]?.molarMass ?? 0.030);
     }, 0) || 0.030;
 
-    const massFlow = molarFlow * avgMW;
+    const massFlowSI = molarFlowSI * avgMW;
+
+    const molarFlowDisplay = fromSI(molarFlowSI, 'molarFlow', unitSettings.molarFlow);
+    const massFlowDisplay = fromSI(massFlowSI, 'massFlow', unitSettings.massFlow);
+    const temperatureDisplay = fromSI(temperatureSI, 'temperature', unitSettings.temperature);
+    const pressureDisplay = fromSI(pressureSI, 'pressure', unitSettings.pressure);
 
     return <>
         <BasisToggle basis={flowBasis} setBasis={setFlowBasis} />
 
         <div style={fieldStyle}>
-            <label style={labelStyle}>Molar Flow (mol/s){flowBasis === 'mass' ? ' — calculated' : ''}</label>
+            <label style={labelStyle}>Molar Flow ({unitSettings.molarFlow}){flowBasis === 'mass' ? ' — calculated' : ''}</label>
             <NumberInput
-                value={molarFlow}
+                value={molarFlowDisplay}
                 readOnly={flowBasis === 'mass'}
                 inputStyle={inputStyle}
                 onChange={flowBasis === 'molar' ? (v) => {
-                    update('molarFlow', v);
-                    update('massFlow', v * avgMW);
+                    const si = toSI(v, 'molarFlow', unitSettings.molarFlow);
+                    update('molarFlow', si);
+                    update('massFlow', si * avgMW);
                 } : undefined} />
         </div>
 
         <div style={fieldStyle}>
-            <label style={labelStyle}>Mass Flow (kg/s){flowBasis === 'molar' ? ' — calculated' : ''}</label>
+            <label style={labelStyle}>Mass Flow ({unitSettings.massFlow}){flowBasis === 'molar' ? ' — calculated' : ''}</label>
             <NumberInput
-                value={massFlow}
+                value={massFlowDisplay}
                 readOnly={flowBasis === 'molar'}
                 inputStyle={inputStyle}
                 onChange={flowBasis === 'mass' ? (v) => {
-                    update('massFlow', v);
-                    update('molarFlow', avgMW > 0 ? v / avgMW : 0);
+                    const si = toSI(v, 'massFlow', unitSettings.massFlow);
+                    update('massFlow', si);
+                    update('molarFlow', avgMW > 0 ? si / avgMW : 0);
                 } : undefined} />
         </div>
 
         <div style={fieldStyle}>
             <label style={labelStyle}>Temperature (K)</label>
-            <NumberInput value={temperature} inputStyle={inputStyle} onChange={(v) => update('temperature', v)} />
+            <NumberInput value={temperatureDisplay} inputStyle={inputStyle} onChange={(v) => update('temperature', toSI(v, 'temperature', unitSettings.temperature))} />
         </div>
 
         <div style={fieldStyle}>
             <label style={labelStyle}>Pressure (Pa)</label>
-            <NumberInput value={pressure} inputStyle={inputStyle} onChange={(v) => update('pressure', v)} />
+            <NumberInput value={pressureDisplay} inputStyle={inputStyle} onChange={(v) => update('pressure', toSI(v, 'pressure', unitSettings.pressure))} />
         </div>
 
         <BasisToggle basis={compBasis} setBasis={setCompBasis} />
@@ -233,9 +243,10 @@ function FeedProperties({ data, components, update }: {
     </>;
 }
 
-export default function PropertiesPanel({ node, components, onNodeDataChange }: PropertiesPanelProps) {
+export default function PropertiesPanel({ node, components, onNodeDataChange, unitSettings }: PropertiesPanelProps) {
     const nodeType = node.data.nodeType as string;
     const data = node.data as Record<string, unknown>;
+    const us = unitSettings ?? DEFAULT_UNITS
 
     const update = (key: string, value: unknown) => {
         onNodeDataChange(node.id, { [key]: value });
@@ -247,30 +258,34 @@ export default function PropertiesPanel({ node, components, onNodeDataChange }: 
                 {String(data.label)} - {nodeType.toUpperCase()}
             </div>
 
-            {nodeType === 'feed' && <FeedProperties data={data} components={components} update={update} />}
+            {nodeType === 'feed' && <FeedProperties data={data} components={components} update={update} unitSettings={us}/>}
             
             {nodeType === 'pump' && <>
                 <div style={fieldStyle}>
-                    <label style={labelStyle}>Target Pressure (Pa)</label>
-                    <NumberInput value={data.targetP as number ?? 183000} inputStyle={inputStyle} onChange={(v) => update('targetP', v)} />
+                    <label style={labelStyle}>Target Pressure ({us.pressure})</label>
+                    <NumberInput value={fromSI(data.targetP as number ?? 183000, 'pressure', us.pressure)} inputStyle={inputStyle}  
+                    onChange={(v) => update('targetP', toSI(v, 'pressure', us.pressure))} />
                 </div>
             </>}
 
             {nodeType === 'heater' && <>
                 <div style={fieldStyle}>
-                    <label style={labelStyle}>Target Temperature (K)</label>
-                    <NumberInput value={data.targetT as number ?? 380} inputStyle={inputStyle} onChange={(v) => update('targetT', v)} />
+                    <label style={labelStyle}>Target Temperature ({us.temperature})</label>
+                    <NumberInput value={fromSI(data.targetT as number ?? 380, 'temperature', us.temperature)} inputStyle={inputStyle} 
+                    onChange={(v) => update('targetT', toSI(v, 'temperature', us.temperature))} />
                 </div>
             </>}
 
             {nodeType === 'flash' && <>
                 <div style={fieldStyle}>
-                    <label style={labelStyle}>Temperature (K)</label>
-                    <NumberInput value={data.targetT as number ?? 380} inputStyle={inputStyle} onChange={(v) => update('targetT', v)} />
+                    <label style={labelStyle}>Temperature ({us.temperature})</label>
+                    <NumberInput value={fromSI(data.targetP as number ?? 183000, 'pressure', us.pressure)} inputStyle={inputStyle} 
+                    onChange={(v) => update('targetT', toSI(v, 'temperature', us.temperature))} />
                 </div>
                 <div style={fieldStyle}>
-                    <label style={labelStyle}>Pressure (Pa)</label>
-                    <NumberInput value={data.targetP as number ?? 183000} inputStyle={inputStyle} onChange={(v) => update('targetP', v)} />
+                    <label style={labelStyle}>Pressure ({us.pressure})</label>
+                    <NumberInput value={fromSI(data.targetP as number ?? 183000, 'pressure', us.pressure)} inputStyle={inputStyle} 
+                    onChange={(v) => update('targetP', toSI(v, 'pressure', us.pressure))} />
                 </div>
             </>}
             

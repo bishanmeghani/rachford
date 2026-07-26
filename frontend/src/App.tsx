@@ -4,6 +4,7 @@ import type { Connection, Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import Layout from './components/Layout';
 import UnitOpNode from './nodes/UnitOpNode';
+import { DEFAULT_UNITS, type UnitSettings, fromSI } from './data/unitsDatabase';
 import toast from 'react-hot-toast';
 
 const nodeTypes = { unitOp: UnitOpNode }
@@ -23,6 +24,10 @@ export default function App() {
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const selectedNode = nodes.find(n => n.id === selectedNodeId) ?? null;
+  const [unitSettings, setUnitSettings] = useState<UnitSettings>(() => {
+    try { return JSON.parse(localStorage.getItem('bchemsim_units') ?? 'null') ?? DEFAULT_UNITS; }
+    catch { return DEFAULT_UNITS; }
+  });
   
   useEffect(() => {
     const state = {
@@ -33,6 +38,10 @@ export default function App() {
     };
     localStorage.setItem('bchemsim_flowsheet', JSON.stringify(state));
   }, [nodes, edges, components]);
+
+  useEffect(() => {
+    localStorage.setItem('bchemsim_units', JSON.stringify(unitSettings));
+  }, [unitSettings]);
 
   const onNew = () => {
     setNodes([]);
@@ -250,7 +259,7 @@ export default function App() {
   }, [setNodes]);
 
   return (
-    <Layout onRun={runSimulation} onNew={onNew} onSave={onSave} onSaveAs={onSaveAs} onLoad={onLoad} onFitView={fitView} result={result} loading={loading} components={components} onComponentsChange={setComponents} selectedNode={selectedNode} onNodeDataChange={onNodeDataChange}>
+    <Layout onRun={runSimulation} onNew={onNew} onSave={onSave} onSaveAs={onSaveAs} onLoad={onLoad} onFitView={fitView} result={result} loading={loading} components={components} onComponentsChange={setComponents} selectedNode={selectedNode} onNodeDataChange={onNodeDataChange} unitSettings={unitSettings} onUnitSettingsChange={setUnitSettings}>
       <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}
         onDragOver = {onDragOver}
         onDrop = {onDrop}>
@@ -283,6 +292,7 @@ export default function App() {
         {hoveredEdge && (() => {
           const edge = edges.find(e => e.id === hoveredEdge.id);
           if (!edge) return null;
+          if (!unitSettings) return null;
           const label = edge.label as string;
           const streamData = result ? (() => {
             try {
@@ -304,10 +314,10 @@ export default function App() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                   <tbody>
                     {[
-                      ['Mass Flow', `${streamData.massFlow?.toFixed(3)} kg/s`],
-                      ['Molar Flow', `${streamData.molarFlow?.toFixed(3)} mol/s`],
-                      ['Temperature', `${streamData.temperature?.toFixed(1)} K`],
-                      ['Pressure', `${streamData.pressure?.toFixed(0)} Pa`],
+                      ['Molar Flow', `${fromSI(streamData.molarFlow, 'molarFlow', unitSettings.molarFlow).toFixed(3)} ${unitSettings.molarFlow}`],
+                      ['Mass Flow', `${fromSI(streamData.massFlow, 'massFlow', unitSettings.massFlow).toFixed(3)} ${unitSettings.massFlow}`],
+                      ['Temperature', `${fromSI(streamData.temperature, 'temperature', unitSettings.temperature).toFixed(1)} ${unitSettings.temperature}`],
+                      ['Pressure', `${fromSI(streamData.pressure, 'pressure', unitSettings.pressure).toFixed(0)} ${unitSettings.pressure}`],
                       ['Phase', streamData.phase]
                     ].map(([k, v]) => (
                       <tr key={k}>

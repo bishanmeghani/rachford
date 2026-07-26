@@ -5,6 +5,8 @@ import type { Node } from '@xyflow/react';
 import Palette from './Palette';
 import Explorer from './Explorer';
 import PropertiesPanel from './PropertiesPanel';
+import UnitsSettings from './UnitsSettings';
+import { DEFAULT_UNITS, fromSI, type UnitSettings } from '../data/unitsDatabase';
 
 interface LayoutProps {
     children: ReactNode;
@@ -20,14 +22,17 @@ interface LayoutProps {
     onComponentsChange?: (c: string[]) => void;
     selectedNode?: Node | null;
     onNodeDataChange?: (id: string, data: Record<string, unknown>) => void;
+    unitSettings?: UnitSettings;
+    onUnitSettingsChange?: (s: UnitSettings) => void;
 }
 
 const COLLAPSE_THRESHOLD = 125;
 
-export default function Layout({ children, onRun, onNew, onSave, onSaveAs, onLoad, onFitView, result, loading, components, onComponentsChange, selectedNode, onNodeDataChange }: LayoutProps) {
+export default function Layout({ children, onRun, onNew, onSave, onSaveAs, onLoad, onFitView, result, loading, components, onComponentsChange, selectedNode, onNodeDataChange, unitSettings, onUnitSettingsChange }: LayoutProps) {
     const [explorerWidth, setExplorerWidth] = useState(200);
     const [messagesHeight, setMessagesHeight] = useState(150);
     const [rightPanelWidth, setRightPanelWidth] = useState(200);
+    const [showUnitsModal, setShowUnitsModal] = useState(false);
 
     const onExplorerDrag = (e: React.MouseEvent) => {
         e.preventDefault();
@@ -87,7 +92,7 @@ export default function Layout({ children, onRun, onNew, onSave, onSaveAs, onLoa
             
             {/* Menu Bar */}
             <div style={{ height: 36, background: '#1e293b', borderBottom: '1px solid #334155', display: 'flex', alignItems: 'center', padding: '0 8px', gap: 4, flexShrink: 0 }}>
-                <MenuBar onRun={onRun} onNew={onNew} onSave={onSave} onSaveAs={onSaveAs} onLoad={onLoad} onFitView={onFitView} />
+                <MenuBar onRun={onRun} onNew={onNew} onSave={onSave} onSaveAs={onSaveAs} onLoad={onLoad} onFitView={onFitView} onUnitsSettings={() => setShowUnitsModal(true)}/>
             </div>
 
             {/* Main area */}
@@ -101,13 +106,15 @@ export default function Layout({ children, onRun, onNew, onSave, onSaveAs, onLoa
                             {explorerCollapsed ? '▶' : '◀'}
                         </span>
                     </div>
-                    {!explorerCollapsed && <Explorer components={components ?? []} onComponentsChange={onComponentsChange ?? (() => {})} />}
-                        <div
-                            onMouseDown={onExplorerDrag}
-                            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'ew-resize', background: 'transparent', zIndex: 10 }}
-                            onMouseEnter={e => (e.currentTarget.style.background = '#2563eb')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        />
+                    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+                        {!explorerCollapsed && <Explorer components={components ?? []} onComponentsChange={onComponentsChange ?? (() => {})} />}
+                    </div>
+                    <div
+                        onMouseDown={onExplorerDrag}
+                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'ew-resize', background: 'transparent', zIndex: 10 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#2563eb')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    />
                 </div>
 
                 {/* Canvas */}
@@ -116,7 +123,7 @@ export default function Layout({ children, onRun, onNew, onSave, onSaveAs, onLoa
                 </div>
 
                 {/* Right Panel */}
-                <RightPanel width={rightPanelWidth} onDrag={onRightPanelDrag} onCollapse={() => setRightPanelWidth(32)} onExpand={() => setRightPanelWidth(220)} selectedNode={selectedNode} onNodeDataChange={onNodeDataChange} components={components}/>
+                <RightPanel width={rightPanelWidth} onDrag={onRightPanelDrag} onCollapse={() => setRightPanelWidth(32)} onExpand={() => setRightPanelWidth(220)} selectedNode={selectedNode} onNodeDataChange={onNodeDataChange} components={components} unitSettings={unitSettings} />
 
             </div>
 
@@ -135,14 +142,33 @@ export default function Layout({ children, onRun, onNew, onSave, onSaveAs, onLoa
                         </span>
                     </div>
                 </div>
-                {!messagesCollapsed && <MessagesContent result={result} loading={loading} />}
+                {!messagesCollapsed && <MessagesContent result={result} loading={loading} unitSettings={unitSettings} />}
             </div>
 
+            {showUnitsModal && (
+                <div style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+                    zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}
+                    onClick={() => setShowUnitsModal(false)}>
+                    <div style={{
+                        background: '#1e293b', border: '1px solid #334155', borderRadius: 8,
+                        padding: 24, minWidth: 300, boxShadow: '0 8px 32px rgba(0,0,0,0.6)'
+                    }}
+                        onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0' }}>Units Settings</span>
+                            <span onClick={() => setShowUnitsModal(false)} style={{ cursor: 'pointer', color: '#475569', fontSize: 18 }}>✕</span>
+                        </div>
+                        <UnitsSettings settings={unitSettings ?? DEFAULT_UNITS} onChange={onUnitSettingsChange ?? (() => {})} />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-function MenuBar({ onRun, onNew, onSave, onSaveAs, onLoad, onFitView }: { onRun?: () => void; onNew?: () => void; onSave?: () => void; onSaveAs?: () => void; onLoad?: () => void; onFitView?: () => void}) {
+function MenuBar({ onRun, onNew, onSave, onSaveAs, onLoad, onFitView, onUnitsSettings }: { onRun?: () => void; onNew?: () => void; onSave?: () => void; onSaveAs?: () => void; onLoad?: () => void; onFitView?: () => void; onUnitsSettings?: () => void;}) {
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
     
     useEffect(() => {
@@ -171,6 +197,7 @@ function MenuBar({ onRun, onNew, onSave, onSaveAs, onLoad, onFitView }: { onRun?
             { label: 'Fit to Screen', action: onFitView },
         ],
         Tools: [
+            { label: 'Units Settings', action: onUnitsSettings },
             { label: 'Settings' },
         ],
         Help: [
@@ -208,7 +235,7 @@ function MenuBar({ onRun, onNew, onSave, onSaveAs, onLoad, onFitView }: { onRun?
     );
 }
 
-function RightPanel({ width, onDrag, onCollapse, onExpand, selectedNode, onNodeDataChange, components }: { width: number; onDrag: (e: React.MouseEvent) => void; onCollapse: () => void; onExpand: () => void; selectedNode?: Node | null; onNodeDataChange?: (id: string, data: Record<string, unknown>) => void; components?: string[];}) {
+function RightPanel({ width, onDrag, onCollapse, onExpand, selectedNode, onNodeDataChange, components, unitSettings }: { width: number; onDrag: (e: React.MouseEvent) => void; onCollapse: () => void; onExpand: () => void; selectedNode?: Node | null; onNodeDataChange?: (id: string, data: Record<string, unknown>) => void; components?: string[]; unitSettings?: UnitSettings}) {
     const [activeTab, setActiveTab] = useState<'unitops' | 'properties'>('unitops');
     const collapsed = width <= 32;
 
@@ -246,7 +273,7 @@ function RightPanel({ width, onDrag, onCollapse, onExpand, selectedNode, onNodeD
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                     {activeTab === 'unitops' && <Palette embedded />}
                     {activeTab === 'properties' && (
-                        selectedNode ? <PropertiesPanel node={selectedNode} components={components ?? []} onNodeDataChange={onNodeDataChange ?? (() => {})} /> :
+                        selectedNode ? <PropertiesPanel node={selectedNode} components={components ?? []} onNodeDataChange={onNodeDataChange ?? (() => {})} unitSettings={unitSettings} /> :
                         <div style={{ padding: '8px 12px', fontSize: 11, color: '#475569' }}>Select a unit to view properties.</div>
                     )}
                 </div>
@@ -255,7 +282,7 @@ function RightPanel({ width, onDrag, onCollapse, onExpand, selectedNode, onNodeD
     );
 }
 
-function MessagesContent({ result, loading }: { result?: string | null; loading?: boolean }) {
+function MessagesContent({ result, loading, unitSettings }: { result?: string | null; loading?: boolean; unitSettings?: UnitSettings; }) {
     if (loading) return <div style={{ padding: '8px 12px', fontSize: 11, color: '#94a3b8' }}>Running simulation...</div>;
     if (!result) return <div style={{ padding: '8px 12px', fontSize: 11, color: '#475569' }}>No results yet — run a simulation.</div>;
     let parsed: any = null;
@@ -278,10 +305,10 @@ function MessagesContent({ result, loading }: { result?: string | null; loading?
                 <thead>
                     <tr style={{ background: '#0f172a' }}>
                         <th style={headerStyle}></th>
-                        <th style={{ ...headerStyle, textAlign: 'right' }}>Molar Flow (mol/s)</th>
-                        <th style={{ ...headerStyle, textAlign: 'right' }}>Mass Flow (kg/s)</th>
-                        <th style={{ ...headerStyle, textAlign: 'right' }}>T (K)</th>
-                        <th style={{ ...headerStyle, textAlign: 'right' }}>P (Pa)</th>
+                        <th style={{ ...headerStyle, textAlign: 'right' }}>Molar Flow ({unitSettings?.molarFlow ?? 'mol/s'})</th>
+                        <th style={{ ...headerStyle, textAlign: 'right' }}>Mass Flow ({unitSettings?.massFlow ?? 'kg/s'})</th>
+                        <th style={{ ...headerStyle, textAlign: 'right' }}>T ({unitSettings?.temperature ?? 'K'})</th>
+                        <th style={{ ...headerStyle, textAlign: 'right' }}>P ({unitSettings?.pressure ?? 'Pa'})</th>
                         <th style={{ ...headerStyle, textAlign: 'center' }}>Phase</th>
                         {componentNames.map(c => (
                             <th key={`mol-${c}`} style={{ ...headerStyle, textAlign: 'right' }}>{c} (mol)</th>
@@ -298,10 +325,10 @@ function MessagesContent({ result, loading }: { result?: string | null; loading?
                         return (
                             <tr key={id} style={{ background: rowBg }}>
                                 <td style={{ ...dimCellStyle, fontFamily: 'monospace', fontWeight: 700, color: '#60a5fa' }}>{id}</td>
-                                <td style={{ ...cellStyle, textAlign: 'right' }}>{s.molarFlow?.toFixed(3)}</td>
-                                <td style={{ ...cellStyle, textAlign: 'right' }}>{s.massFlow?.toFixed(3)}</td>
-                                <td style={{ ...cellStyle, textAlign: 'right' }}>{s.temperature?.toFixed(1)}</td>
-                                <td style={{ ...cellStyle, textAlign: 'right' }}>{s.pressure?.toFixed(0)}</td>
+                                <td style={{ ...cellStyle, textAlign: 'right' }}>{unitSettings? fromSI(s.molarFlow, 'molarFlow', unitSettings.molarFlow).toFixed(3) : s.molarFlow?.toFixed(3)}</td>
+                                <td style={{ ...cellStyle, textAlign: 'right' }}>{unitSettings? fromSI(s.massFlow, 'massFlow', unitSettings.massFlow).toFixed(3) : s.massFlow?.toFixed(3)}</td>
+                                <td style={{ ...cellStyle, textAlign: 'right' }}>{unitSettings? fromSI(s.temperature, 'temperature', unitSettings.temperature).toFixed(1) : s.temperature?.toFixed(1)}</td>
+                                <td style={{ ...cellStyle, textAlign: 'right' }}>{unitSettings? fromSI(s.pressure, 'pressure', unitSettings.pressure).toFixed(0) : s.pressure?.toFixed(0)}</td>
                                 <td style={{ ...cellStyle, textAlign: 'center', color: s.phase === 'vapor' ? '#f59e0b' : '#3b82f6' }}>{s.phase}</td>
                                 {componentNames.map(c => (
                                     <td key={`mol-${c}`} style={{ ...cellStyle, textAlign: 'right' }}>{(s.molarComposition?.[c] ?? 0).toFixed(4)}</td>
