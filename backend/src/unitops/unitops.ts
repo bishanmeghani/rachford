@@ -120,78 +120,75 @@ export class FlashDrum {
     static flashTP(stream: Stream, targetT: number, targetP: number): { vaporStream: Stream; liquidStream: Stream; vaporFraction: number } {
         const P_mmHg = targetP / 133.322;
         const T_celsius = targetT - 273.15;
-        
-        const z_mole = stream.molarComposition;
-        
-        const K_values: Record<string, number> = {};
-        for (const component of Object.keys(z_mole)) {
-            const comp = COMPONENTS_DB[component];
-            if (!comp) throw new Error(`Missing Antoine coeffs for [${component}]`);
-            const logPsat = comp.antoine.A - comp.antoine.B / (T_celsius + comp.antoine.C);;
-            K_values[component] = Math.pow(10, logPsat) / P_mmHg;
+        const z = stream.molarComposition;
+        const components = Object.keys(z);
+
+        const K: Record<string, number> = {};
+        for (const c of components) {
+            const comp = COMPONENTS_DB[c];
+            if (!comp) throw new Error(`Missing data for ${c}`);
+            const logPsat = comp.antoine.A - comp.antoine.B / (T_celsius + comp.antoine.C);
+            K[c] = Math.pow(10, logPsat) / P_mmHg;
         }
 
-        let psi = 0.5;
-        let lo = 0.0, hi = 1.0;
+        // Rachford-Rice function
+        const RR = (psi: number) => components.reduce((s, c) => s + z[c] * (K[c] - 1) / (1 + psi * (K[c] - 1)), 0);
 
-        const f0 = Object.entries(z_mole).reduce((s, [c, z]) => s + z * (K_values[c] - 1), 0);
-        const f1 = Object.entries(z_mole).reduce((s, [c, z]) => s + z * (K_values[c] - 1) / K_values[c], 0);
+        const f0 = RR(0);
+        const f1 = RR(1);
 
         const vaporPhase = "vapor" as const;
         const liquidPhase = "liquid" as const;
 
-        if (f0 <= 1.0) {
-            const { composition, massFlow } = molarToMass(z_mole, stream.molarFlow);
+        if (f0 <= 0) {
+            // All liquid
+            const { composition, massFlow } = molarToMass(z, stream.molarFlow);
             return {
-                vaporStream: { ...stream, id: `${stream.id}-vapor`, molarFlow: 0, massFlow: 0, temperature: targetT, pressure: targetP, phase: vaporPhase },
-                liquidStream: { ...stream, id: `${stream.id}-liquid`, molarFlow: stream.molarFlow, massFlow, temperature: targetT, pressure: targetP, molarComposition: z_mole, composition, phase: liquidPhase },
-                vaporFraction: 0.0
+                vaporStream: { ...stream, id: `${stream.id}-vapor`, molarFlow: 0, massFlow: 0, temperature: targetT, pressure: targetP, molarComposition: { ...z }, composition, phase: vaporPhase },
+                liquidStream: { ...stream, id: `${stream.id}-liquid`, molarFlow: stream.molarFlow, massFlow, temperature: targetT, pressure: targetP, molarComposition: { ...z }, composition, phase: liquidPhase },
+                vaporFraction: 0
             };
-        } 
-        
-        if (f1 >= 0.0) {
-            const { composition, massFlow } = molarToMass(z_mole, stream.molarFlow);
-            return {
-                vaporStream: { ...stream, id: `${stream.id}-vapor`, molarFlow: stream.molarFlow, massFlow, temperature: targetT, pressure: targetP, molarComposition: z_mole, composition, phase: vaporPhase },
-                liquidStream: { ...stream, id: `${stream.id}-liquid`, molarFlow: 0, massFlow: 0, temperature: targetT, pressure: targetP, phase: liquidPhase },
-                vaporFraction: 1.0
-            };
-        } 
+        }
 
-        for (let iter = 0; iter < 100; iter++) {
-            psi = 0.5 * (lo + hi);
-            const f = Object.entries(z_mole).reduce((s, [c, z]) => {
-                return s + z * (K_values[c] - 1) / (1 + psi * (K_values[c] - 1));
-            }, 0);
-            if (Math.abs(f) < 1e-8) break;
+        if (f1 >= 0) {
+            // All vapor
+            const { composition, massFlow } = molarToMass(z, stream.molarFlow);
+            return {
+                vaporStream: { ...stream, id: `${stream.id}-vapor`, molarFlow: stream.molarFlow, massFlow, temperature: targetT, pressure: targetP, molarComposition: { ...z }, composition, phase: vaporPhase },
+                liquidStream: { ...stream, id: `${stream.id}-liquid`, molarFlow: 0, massFlow: 0, temperature: targetT, pressure: targetP, molarComposition: { ...z }, composition, phase: liquidPhase },
+                vaporFraction: 1
+            };
+        }
+
+        // Bisection
+        let lo = 0, hi = 1, psi = 0.5;
+        for (let i = 0; i < 200; i++) {
+            psi = (lo + hi) / 2;
+            const f = RR(psi);
+            if (Math.abs(f) < 1e-10) break;
             if (f > 0) lo = psi;
             else hi = psi;
         }
 
-        psi = Math.max(0, Math.min(1, psi));
-
-        // Liquid and vapor mole fractions
-        const liquidMoleComp: Composition = {};
-        const vaporMoleComp: Composition = {};
-
-        for (const [component, z_i] of Object.entries(z_mole)) {
-            const K_i = K_values[component];
-            liquidMoleComp[component] = z_i / (1 + psi * (K_i - 1));
-            vaporMoleComp[component] = liquidMoleComp[component] * K_i;
+        // Phase compositions
+        const xL: Record<string, number> = {};
+        const yV: Record<string, number> = {};
+        for (const c of components) {
+            xL[c] = z[c] / (1 + psi * (K[c] - 1));
+            yV[c] = xL[c] * K[c];
         }
 
         const vaporMolarFlow = stream.molarFlow * psi;
         const liquidMolarFlow = stream.molarFlow * (1 - psi);
 
-        const { composition: liquidMassComp, massFlow: liquidMassFlow } = molarToMass(liquidMoleComp, liquidMolarFlow);
-        const { composition: vaporMassComp, massFlow: vaporMassFlow } = molarToMass(vaporMoleComp, vaporMolarFlow);
-
+        const { composition: lMass, massFlow: lMassFlow } = molarToMass(xL, liquidMolarFlow);
+        const { composition: vMass, massFlow: vMassFlow } = molarToMass(yV, vaporMolarFlow);
+        console.log(`f0=${f0.toFixed(6)} f1=${f1.toFixed(6)} psi=${psi.toFixed(6)}`);
         return {
-            vaporStream: { id: `${stream.id}-vapor`, molarFlow: vaporMolarFlow, massFlow: vaporMassFlow, temperature: targetT, pressure: targetP, molarComposition: vaporMoleComp, composition: vaporMassComp, phase: vaporPhase },
-            liquidStream: { id: `${stream.id}-liquid`, molarFlow: liquidMolarFlow, massFlow: liquidMassFlow, temperature: targetT, pressure: targetP, molarComposition: liquidMoleComp, composition: liquidMassComp, phase: liquidPhase },
+            vaporStream: { id: `${stream.id}-vapor`, molarFlow: vaporMolarFlow, massFlow: vMassFlow, temperature: targetT, pressure: targetP, molarComposition: yV, composition: vMass, phase: vaporPhase },
+            liquidStream: { id: `${stream.id}-liquid`, molarFlow: liquidMolarFlow, massFlow: lMassFlow, temperature: targetT, pressure: targetP, molarComposition: xL, composition: lMass, phase: liquidPhase },
             vaporFraction: psi
         };
-        
     }
 
     static flashPQ(stream: Stream, targetP: number, Q: number): { vaporStream: Stream; liquidStream: Stream; vaporFraction: number } {

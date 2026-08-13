@@ -1,5 +1,5 @@
-import { Mixer, HeatExchanger, FlashDrum, Splitter, Pump, massToMolar, molarToMass } from "../unitops/unitops.ts";
-import type { Stream, Composition, FlowsheetNode, FlowsheetEdge } from "../types/types.ts";
+import { Mixer, HeatExchanger, FlashDrum, Splitter, Pump, massToMolar } from "../unitops/unitops.ts";
+import type { Stream, FlowsheetNode, FlowsheetEdge } from "../types/types.ts";
 
 export type StreamMap = Record<string, Stream>;
 
@@ -31,13 +31,22 @@ function topoSort(nodes: FlowsheetNode[], edges: FlowsheetEdge[]): FlowsheetNode
     return sorted;
 }
 
-export function executeFlowsheet(nodes: FlowsheetNode[], edges: FlowsheetEdge[], _components: string[]): { streams: StreamMap; log: string[] } {
-    const sorted = topoSort(nodes, edges);
-    const streams: StreamMap = {};
+export function executeFlowsheet(
+    nodes: FlowsheetNode[], 
+    edges: FlowsheetEdge[], 
+    _components: string[], 
+    injectedStreams: StreamMap = {},
+    sortEdges?: FlowsheetEdge[]
+): { streams: StreamMap; log: string[] } {
+    const streams: StreamMap = { ...injectedStreams };
+    const sorted = topoSort(nodes, sortEdges ?? edges);
     const log: string[] = [];
 
-    const getInlets = (nodeId: string): { handle: string | null; stream: Stream }[] => {
-        return edges.filter(e => e.target === nodeId).map(e => ({ handle: e.targetHandle, stream: streams[e.id] })).filter(x => x.stream !== undefined);
+    const getInlets = (nodeId: string) => {
+        return edges
+        .filter(e => e.target === nodeId)
+        .map(e => ({ handle: e.targetHandle, stream: streams[e.id] }))
+        .filter(x => x.stream !== undefined);
     };
 
     const getOutlets = (nodeId: string): FlowsheetEdge[] => {
@@ -98,6 +107,8 @@ export function executeFlowsheet(nodes: FlowsheetNode[], edges: FlowsheetEdge[],
         }
 
         else if (node.nodeType === 'flash') {
+            log.push(`Flash node data: targetT=${data.targetT} targetP=${data.targetP}`);
+            log.push(`  Flash outlets: ${outlets.map(o => `${o.id}:${o.sourceHandle}`).join(', ')}`);
             if (inlets.length === 0) throw new Error(`Flash ${node.label} has no inlet`);
             const targetT = data.targetT as number ?? 380;
             const targetP = data.targetP as number ?? 183000;

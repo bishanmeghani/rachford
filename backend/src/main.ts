@@ -1,5 +1,6 @@
 import { FlowsheetNode, FlowsheetEdge } from './types/types.ts';
-import { executeFlowsheet } from "./solver/topology.ts";
+import { executeWithRecycle } from './solver/recycle.ts';
+import { executeFlowsheet } from './solver/topology.ts';
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -19,8 +20,10 @@ Deno.serve(async (req) => {
         try {
             const body = await req.json();
             const { nodes, edges, components } = body;
-            const { streams, log } = executeFlowsheet(nodes as FlowsheetNode[], edges as FlowsheetEdge[], components as string[]);
-            return new Response(JSON.stringify({ status: "Success", streams, log, }, null, 2), { headers: corsHeaders });
+            const { streams, log, converged, iterations } = executeWithRecycle(nodes as FlowsheetNode[], edges as FlowsheetEdge[], components as string[]);
+            
+            return new Response(JSON.stringify({ status: converged ? "Success" : "NotConverged", iterations, streams, log, }, null, 2), { headers: corsHeaders });
+            
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
             return new Response(JSON.stringify({ status: "Failed", error: errorMessage }), {

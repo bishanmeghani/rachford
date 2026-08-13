@@ -146,12 +146,12 @@ function FeedProperties({ data, components, update, unitSettings }: {
         </div>
 
         <div style={fieldStyle}>
-            <label style={labelStyle}>Temperature (K)</label>
+            <label style={labelStyle}>Temperature ({unitSettings.temperature})</label>
             <NumberInput value={temperatureDisplay} inputStyle={inputStyle} onChange={(v) => update('temperature', toSI(v, 'temperature', unitSettings.temperature))} />
         </div>
 
         <div style={fieldStyle}>
-            <label style={labelStyle}>Pressure (Pa)</label>
+            <label style={labelStyle}>Pressure ({unitSettings.pressure})</label>
             <NumberInput value={pressureDisplay} inputStyle={inputStyle} onChange={(v) => update('pressure', toSI(v, 'pressure', unitSettings.pressure))} />
         </div>
 

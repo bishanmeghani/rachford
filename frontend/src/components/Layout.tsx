@@ -291,7 +291,11 @@ function MessagesContent({ result, loading, unitSettings }: { result?: string | 
         return <div style={{ padding: '8px 12px', fontSize: 11, color: '#ef4444' }}>Error: {parsed.error}</div>
     }
     const streams = parsed.streams ?? {};
-    const streamIds = Object.keys(streams);
+    const streamIds = Object.keys(streams).sort((a, b) => {
+        const numA = parseInt(a.replace('S', ''));
+        const numB = parseInt(b.replace('S', ''));
+        return numA - numB;
+    });
     if (streamIds.length === 0) return <div style={{ padding: '8px 12px', fontSize: 11, color: '#475569'  }}>No streams in result.</div>;
     const firstStream = streams[streamIds[0]];
     const componentNames = Object.keys(firstStream?.composition ?? {});

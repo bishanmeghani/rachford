@@ -164,11 +164,18 @@ export default function App() {
       return `${prefix}${count}`;
     };
     const label = getNodeLabel(type, nodes);
+    const defaultData: Record<string, Record<string, unknown>> = {
+        feed: { massFlow: 10, molarFlow: 100, temperature: 300, pressure: 101325, composition: { water: 0.3, ethanol: 0.7 }, molarComposition: { water: 0.5229, ethanol: 0.4771 } },
+        pump: { targetP: 183000 },
+        heater: { targetT: 380 },
+        flash: { targetT: 361.15, targetP: 101325 },
+        splitter: { splitFraction: 0.4 },
+    };    
     const newNode = {
       id: `${type}-${Date.now()}`,
       type: 'unitOp',
       position,
-      data: { label, nodeType: type }
+      data: { label, nodeType: type, ...(defaultData[type] ?? {}) }
     };
     setNodes((nds) => nds.concat(newNode));    
   };
