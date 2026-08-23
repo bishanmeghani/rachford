@@ -1,26 +1,57 @@
-name: Backend CI
+name: CI
 
 on:
   push:
-    paths:
-      - 'backend/**'
+    branches: [main]
   pull_request:
-    paths:
-      - 'backend/**'
+    branches: [main]
 
 jobs:
-  test:
+  backend-tests:
+    name: Backend Unit Tests
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Deno
-        uses: denoland/setup-deno@v1
+        uses: denoland/setup-deno@v2
         with:
-          deno-version: "v1.x"  # or v2.x if you're fully on Deno 2
+          deno-version: "v2.x"
 
       - name: Run tests
         working-directory: backend
         run: deno task test
+
+  frontend-tests:
+    name: Frontend E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start frontend
+        working-directory: frontend
+        run: npm run dev &
+
+      - name: Wait for frontend
+        run: sleep 5
+
+      - name: Run E2E tests
+        working-directory: frontend
+        run: npx playwright test --config playwright.config.ts
+        env:
+          BASE_URL: http://localhost:5173
