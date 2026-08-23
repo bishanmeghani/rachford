@@ -183,7 +183,7 @@ export class FlashDrum {
 
         const { composition: lMass, massFlow: lMassFlow } = molarToMass(xL, liquidMolarFlow);
         const { composition: vMass, massFlow: vMassFlow } = molarToMass(yV, vaporMolarFlow);
-        console.log(`f0=${f0.toFixed(6)} f1=${f1.toFixed(6)} psi=${psi.toFixed(6)}`);
+        
         return {
             vaporStream: { id: `${stream.id}-vapor`, molarFlow: vaporMolarFlow, massFlow: vMassFlow, temperature: targetT, pressure: targetP, molarComposition: yV, composition: vMass, phase: vaporPhase },
             liquidStream: { id: `${stream.id}-liquid`, molarFlow: liquidMolarFlow, massFlow: lMassFlow, temperature: targetT, pressure: targetP, molarComposition: xL, composition: lMass, phase: liquidPhase },

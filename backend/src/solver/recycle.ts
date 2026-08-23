@@ -93,17 +93,29 @@ export function executeWithRecycle(
 
         const tearOutputs: StreamMap = {};
         for (const te of tearEdges) {
-            const produced = Object.values(streams).find(s =>
-                s.id.includes(te.source) || edges.find(e => e.source === te.source && e.id === te.id)
-            );
-            const sourceOutletEdge = dagEdges.find(e => e.source === te.source);
-            const sourceStream = sourceOutletEdge ? streams[sourceOutletEdge.id] : undefined;
+            // Find the source node's inlet stream
+            const sourceNodeInletEdge = dagEdges.find(e => e.target === te.source);
+            const sourceNodeInlet = sourceNodeInletEdge ? streams[sourceNodeInletEdge.id] : undefined;
             
-            const allSourceStreams = Object.values(streams).filter(s => 
-                s.id.startsWith(te.source) || (produced && s.id === produced.id)
-            );
+            // Find the DAG outlet edge from same source
+            const dagOutlet = dagEdges.find(e => e.source === te.source);
+            const dagOutletStream = dagOutlet ? streams[dagOutlet.id] : undefined;
             
-            tearOutputs[te.id] = sourceStream ?? allSourceStreams[0] ?? tearGuesses[te.id]
+            if (dagOutletStream && sourceNodeInlet) {
+                // The tear stream has the same composition/T/P but different flow
+                // Total flow = dagOutlet + tearStream (they split the inlet)
+                const totalFlow = sourceNodeInlet.molarFlow;
+                const dagFlow = dagOutletStream.molarFlow;
+                const tearFlow = totalFlow - dagFlow;
+                tearOutputs[te.id] = {
+                    ...dagOutletStream,
+                    id: te.id,
+                    molarFlow: tearFlow,
+                    massFlow: sourceNodeInlet.massFlow - dagOutletStream.massFlow,
+                };
+            } else {
+                tearOutputs[te.id] = tearGuesses[te.id];
+            }
         }
 
         let maxError = 0;
@@ -167,14 +179,23 @@ export function executeWithRecycle(
             log.push(`✅ Converged in ${iter} iterations`);
             break;
         }
+        
     }
 
     if (!converged) log.push(`⚠️ Did not converge in ${maxIterations} iterations — returning best estimate`);
 
     for (const te of tearEdges) {
-        allStreams[te.id] = tearGuesses[te.id];
+        if (!allStreams[te.id]) 
+            allStreams[te.id] = tearGuesses[te.id];
+    }
+    
+    if (converged) {
+        const { streams: finalStreams } = executeFlowsheet(nodes, edges, components, { ...tearGuesses }, dagEdges);
+        allStreams = finalStreams;
+        for (const te of tearEdges) {
+            if (!allStreams[te.id]) allStreams[te.id] = tearGuesses[te.id];
+        }
     }
 
     return { streams: allStreams, log, converged, iterations: iter };
-
 }

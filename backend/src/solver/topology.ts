@@ -107,8 +107,6 @@ export function executeFlowsheet(
         }
 
         else if (node.nodeType === 'flash') {
-            log.push(`Flash node data: targetT=${data.targetT} targetP=${data.targetP}`);
-            log.push(`  Flash outlets: ${outlets.map(o => `${o.id}:${o.sourceHandle}`).join(', ')}`);
             if (inlets.length === 0) throw new Error(`Flash ${node.label} has no inlet`);
             const targetT = data.targetT as number ?? 380;
             const targetP = data.targetP as number ?? 183000;

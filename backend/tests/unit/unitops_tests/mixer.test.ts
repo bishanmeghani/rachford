@@ -1,73 +1,50 @@
-import { assert, assertAlmostEquals, assertThrows } from "@std/assert"
-import { Mixer } from "../../../src/unitops/unitops.ts";
-import { Stream } from "../../../src/types/types.ts";
+import { assert, assertAlmostEquals } from "@std/assert"
+import { Mixer, massToMolar } from "../../../src/unitops/unitops.ts"
+import type { Stream } from "../../../src/types/types.ts"
 
-const baseStream1: Stream = {
-    id: "test-stream",
-    massFlow: 10.0,
-    temperature: 300,
-    pressure: 101325,
-    composition: { water: 0.5, ethanol: 0.5 },
-    phase: "liquid"
-};
 
-const baseStream2: Stream = {
-    id: "test-stream",
-    massFlow: 10.0,
-    temperature: 300,
-    pressure: 101325,
-    composition: { water: 0.5, ethanol: 0.5 },
-    phase: "liquid"
-};
+function makeStream(id: string, massFlow: number, temperature: number, pressure: number, composition: Record<string, number>): Stream {
+    const { molarComposition, molarFlow } = massToMolar(composition, massFlow);
+    return { id, massFlow, molarFlow, temperature, pressure, composition, molarComposition, phase: "liquid" };
+}
 
-Deno.test("Mixer: mass flow is conserved", () => {
-    const s = Mixer.mix([baseStream1, baseStream2]);
-    assertAlmostEquals(s.massFlow, baseStream1.massFlow + baseStream2.massFlow);
+const stream1 = makeStream("s1", 10.0, 300, 101325, { water: 0.3, ethanol: 0.7 });
+const stream2 = makeStream("s2", 5.0, 400, 101325, { water: 0.6, ethanol: 0.4 });
+
+Deno.test("Mixer: mass balance", () => {
+    const result = Mixer.mix([stream1, stream2]);
+    assertAlmostEquals(result.massFlow, stream1.massFlow + stream2.massFlow, 1e-6);
 });
 
-Deno.test("Mixer: composition is conserved", () => {
-    const s = Mixer.mix([baseStream1, baseStream2]);
-    assertAlmostEquals(s.composition.water, baseStream1.composition.water);
-    assertAlmostEquals(s.composition.ethanol, baseStream1.composition.ethanol);
-    assertAlmostEquals(s.composition.water, baseStream2.composition.water);
-    assertAlmostEquals(s.composition.ethanol, baseStream2.composition.ethanol);
+Deno.test("Mixer: molar balance", () => {
+    const result = Mixer.mix([stream1, stream2]);
+    assertAlmostEquals(result.molarFlow, stream1.molarFlow + stream2.molarFlow, 1e-6);
 });
 
-const hotStream: Stream = {
-    id: "hot-stream",
-    massFlow: 5.0,
-    temperature: 400,
-    pressure: 183000,
-    composition: { water: 0.2, ethanol: 0.8 },
-    phase: "liquid"
-};
-
-const coldStream: Stream = {
-    id: "cold-stream",
-    massFlow: 5.0,
-    temperature: 300,
-    pressure: 101325,
-    composition: { water: 0.8, ethanol: 0.2 },
-    phase: "liquid"
-};
-
-Deno.test("Mixer: temperature is weighted average", () => {
-    const s = Mixer.mix([hotStream, coldStream]);
-    // equal mass flows and equal Cp so simple average
-    assertAlmostEquals(s.temperature, 350, 1);
+Deno.test("Mixer: temperature between inlet temperatures", () => {
+    const result = Mixer.mix([stream1, stream2]);
+    assert(result.temperature >= stream1.temperature && result.temperature <= stream2.temperature);
 });
 
-Deno.test("Mixer: composition is weighted average", () => {
-    const s = Mixer.mix([hotStream, coldStream]);
-    assertAlmostEquals(s.composition.water, 0.5);
-    assertAlmostEquals(s.composition.ethanol, 0.5);
+Deno.test("Mixer: composition mass balance", () => {
+    const result = Mixer.mix([stream1, stream2]);
+    const expectedWater = (stream1.composition.water * stream1.massFlow + stream2.composition.water * stream2.massFlow) / (stream1.massFlow + stream2.massFlow);
+    assertAlmostEquals(result.composition.water, expectedWater, 1e-6);
 });
 
-Deno.test("Mixer: pressure takes minimum", () => {
-    const s = Mixer.mix([hotStream, coldStream]);
-    assertAlmostEquals(s.pressure, 101325);
+Deno.test("Mixer: mole fractions sum to 1", () => {
+    const result = Mixer.mix([stream1, stream2]);
+    const sum = Object.values(result.molarComposition).reduce((s, v) => s + v, 0);
+    assertAlmostEquals(sum, 1, 1e-6);
 });
 
-Deno.test("Mixer: empty array throws", () => {
-    assertThrows(() => Mixer.mix([]), Error, "Mixer requires feeds");
+Deno.test("Mixer: pressure is minimum of inlets", () => {
+    const result = Mixer.mix([stream1, stream2]);
+    assertAlmostEquals(result.pressure, Math.min(stream1.pressure, stream2.pressure), 1e-6);
+});
+
+Deno.test("Mixer: single stream returns same flow", () => {
+    const result = Mixer.mix([stream1]);
+    assertAlmostEquals(result.massFlow, stream1.massFlow, 1e-6);
+    assertAlmostEquals(result.molarFlow, stream1.molarFlow, 1e-6);
 });

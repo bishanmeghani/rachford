@@ -1,6 +1,5 @@
 import { FlowsheetNode, FlowsheetEdge } from './types/types.ts';
 import { executeWithRecycle } from './solver/recycle.ts';
-import { executeFlowsheet } from './solver/topology.ts';
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",

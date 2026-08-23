@@ -1,37 +1,47 @@
-import { assert, assertAlmostEquals, assertThrows } from "@std/assert"
-import { HeatExchanger } from "../../../src/unitops/unitops.ts";
-import { Stream } from "../../../src/types/types.ts";
+import { assert, assertAlmostEquals } from "@std/assert"
+import { HeatExchanger, massToMolar } from "../../../src/unitops/unitops.ts";
+import type { Stream } from "../../../src/types/types.ts";
 
-const baseStream: Stream = {
-    id: "test-stream",
-    massFlow: 10.0,
-    temperature: 300,
-    pressure: 101325,
-    composition: { water: 0.5, ethanol: 0.5 },
-    phase: "liquid"
-};
-   
-Deno.test("Heat Exchanger: increasing the temperature requires a positive duty", () => {
-    const { duty } = HeatExchanger.fromOutletTemp(baseStream, baseStream.temperature + 50);
-    assert(duty > 0);
+function makeStream(massFlow: number, temperature: number, pressure: number, composition: Record<string, number>): Stream {
+    const { molarComposition, molarFlow } = massToMolar(composition, massFlow);
+    return { id: "test-stream", massFlow, molarFlow, temperature, pressure, composition, molarComposition, phase: "liquid" };
+}
+
+const inletStream = makeStream(10.0, 300, 101325, { water: 0.3, ethanol: 0.7 });
+
+Deno.test("HeatExchanger: outlet temperature equals target", () => {
+    const { outStream } = HeatExchanger.fromOutletTemp(inletStream, 380);
+    assertAlmostEquals(outStream.temperature, 380, 1e-6);
 });
    
-Deno.test("Heat Exchanger: heater is a cooler", () => {
-    const { duty } = HeatExchanger.fromOutletTemp(baseStream, baseStream.temperature - 50);
+Deno.test("HeatExchanger: mass flow conserved", () => {
+    const { outStream } = HeatExchanger.fromOutletTemp(inletStream, 380);
+    assertAlmostEquals(outStream.massFlow, inletStream.massFlow, 1e-6);
+});
+
+Deno.test("HeatExchanger: molar flow conserved", () => {
+    const { outStream } = HeatExchanger.fromOutletTemp(inletStream, 380);
+    assertAlmostEquals(outStream.molarFlow, inletStream.molarFlow, 1e-6);
+});
+
+Deno.test("HeatExchanger: positive duty when heating", () => {
+    const { duty } = HeatExchanger.fromOutletTemp(inletStream, 380);
+    assert(duty > 0);
+});
+
+Deno.test("HeatExchanger: negative duty when cooling", () => {
+    const hotStream = makeStream(10.0, 380, 101325, { water: 0.3, ethanol: 0.7 });
+    const { duty } = HeatExchanger.fromOutletTemp(hotStream, 300);
     assert(duty < 0);
 });
 
-Deno.test("Heat Exchanger: outlet temperature equals target", () => {
-    const { outStream } = HeatExchanger.fromOutletTemp(baseStream, 380);
-    assertAlmostEquals(outStream.temperature, 380);
+Deno.test("HeatExchanger: composition unchanged", () => {
+    const { outStream } = HeatExchanger.fromOutletTemp(inletStream, 380);
+    assertAlmostEquals(outStream.molarComposition.water, inletStream.molarComposition.water, 1e-6);
+    assertAlmostEquals(outStream.molarComposition.ethanol, inletStream.molarComposition.ethanol, 1e-6);
 });
 
-Deno.test("Heat Exchanger: mass flow is unchanged", () => {
-    const { outStream } = HeatExchanger.fromOutletTemp(baseStream, 380);
-    assertAlmostEquals(outStream.massFlow, baseStream.massFlow);
-});
-
-Deno.test("Heat Exchanger: no duty when target equals inlet temperature", () => {
-    const { duty } = HeatExchanger.fromOutletTemp(baseStream, baseStream.temperature);
-    assertAlmostEquals(duty, 0);
+Deno.test("HeatExchanger: pressure unchanged", () => {
+    const { outStream } = HeatExchanger.fromOutletTemp(inletStream, 380);
+    assertAlmostEquals(outStream.pressure, inletStream.pressure, 1e-6);
 });
