@@ -11,7 +11,7 @@ const nodeTypes = { unitOp: UnitOpNode }
 
 export default function App() {
   const savedState = (() => {
-    try { return JSON.parse(localStorage.getItem('bchemsim_flowsheet') ?? 'null'); } catch { return null; }
+    try { return JSON.parse(localStorage.getItem('rachford_flowsheet') ?? 'null'); } catch { return null; }
   })();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>(savedState?.nodes ?? []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(savedState?.edges ?? []);
@@ -25,7 +25,7 @@ export default function App() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const selectedNode = nodes.find(n => n.id === selectedNodeId) ?? null;
   const [unitSettings, setUnitSettings] = useState<UnitSettings>(() => {
-    try { return JSON.parse(localStorage.getItem('bchemsim_units') ?? 'null') ?? DEFAULT_UNITS; }
+    try { return JSON.parse(localStorage.getItem('rachford_units') ?? 'null') ?? DEFAULT_UNITS; }
     catch { return DEFAULT_UNITS; }
   });
   
@@ -36,11 +36,11 @@ export default function App() {
         edges,
         components,
     };
-    localStorage.setItem('bchemsim_flowsheet', JSON.stringify(state));
+    localStorage.setItem('rachford_flowsheet', JSON.stringify(state));
   }, [nodes, edges, components]);
 
   useEffect(() => {
-    localStorage.setItem('bchemsim_units', JSON.stringify(unitSettings));
+    localStorage.setItem('rachford_units', JSON.stringify(unitSettings));
   }, [unitSettings]);
 
   const onNew = () => {
@@ -48,7 +48,7 @@ export default function App() {
     setEdges([]);
     setResult(null);
     fileHandleRef.current = null;
-    localStorage.removeItem('bchemsim_flowsheet');
+    localStorage.removeItem('rachford_flowsheet');
   };
 
   const fileHandleRef = useRef<any>(null);
@@ -58,8 +58,8 @@ export default function App() {
     try {
       if (!fileHandleRef.current) {
         fileHandleRef.current = await (window as any).showSaveFilePicker({
-          suggestedName: 'flowsheet.bchemsim',
-          types: [{ description: 'BChemSim Flowsheet', accept: { 'application/json': ['.bchemsim'] } }],
+          suggestedName: 'flowsheet.rachford',
+          types: [{ description: 'Rachford-Rice Flowsheet', accept: { 'application/json': ['.rachford'] } }],
         });
       }
       const writable = await fileHandleRef.current.createWritable();
@@ -73,7 +73,7 @@ export default function App() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = 'flowsheet.bchemsim';
+          a.download = 'flowsheet.rachford';
           a.click();
           URL.revokeObjectURL(url);
           toast.success('Flowsheet saved to Downloads');
@@ -212,7 +212,7 @@ export default function App() {
 
     setLoading(true);
     try {
-        const res = await fetch('https://effective-goldfish-6v7jx659x7xf5rpq-8000.app.github.dev/simulate', {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/simulate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -273,7 +273,7 @@ export default function App() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".bchemsim,.json"
+          accept=".rachford,.json"
           style={{ display: 'none' }}
           onChange={onFileChange}
         />

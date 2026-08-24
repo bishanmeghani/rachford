@@ -1,16 +1,16 @@
 services:
   backend:
     build: ./backend
-    container_name: bchem-backend
+    container_name: rachford-backend
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
-    command: deno run --allow-net --allow-read src/main.ts
-  test:
-    build: .
-    container_name: bchem-backend-tests
-    command: ["deno", "test", "--allow-read"]
-    volumes:
-      - ./tests:/app/tests  
-      - ./src:/app/src  
+    restart: unless-stopped
+    
+  frontend:
+    build: ./frontend
+    container_name: rachford-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

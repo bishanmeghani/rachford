@@ -6,9 +6,7 @@ WORKDIR /app
 
 #Copy required files
 COPY deno.json .
-COPY import_map.json .
 COPY src ./src/
-COPY tests ./tests/
 
 #Set permissions (optional in dev)
 RUN deno cache src/main.ts
