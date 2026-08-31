@@ -1,11 +1,12 @@
 import React, { useRef, useState, useCallback, useEffect } from 'react';
-import { ReactFlow, Controls, useNodesState, useEdgesState, addEdge, useReactFlow, MarkerType } from '@xyflow/react';
+import { ReactFlow, Controls, addEdge, useReactFlow, MarkerType } from '@xyflow/react';
 import type { Connection, Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import Layout from './components/Layout';
 import UnitOpNode from './nodes/UnitOpNode';
 import { DEFAULT_UNITS, type UnitSettings, fromSI } from './data/unitsDatabase';
 import toast from 'react-hot-toast';
+import { useFlowsheetStore } from './store/flowsheetStore';
 
 const nodeTypes = { unitOp: UnitOpNode }
 
@@ -13,12 +14,31 @@ export default function App() {
   const savedState = (() => {
     try { return JSON.parse(localStorage.getItem('rachford_flowsheet') ?? 'null'); } catch { return null; }
   })();
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>(savedState?.nodes ?? []);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(savedState?.edges ?? []);
+  const hasSavedFlowsheet = !!(savedState?.nodes?.length);
+
+  const nodes = useFlowsheetStore(s => s.nodes);
+  const edges = useFlowsheetStore(s => s.edges);
+  const components = useFlowsheetStore(s => s.components);
+  const result = useFlowsheetStore(s => s.result);
+  const loading = useFlowsheetStore(s => s.loading);
+  const setNodes = useFlowsheetStore(s => s.setNodes);
+  const setEdges = useFlowsheetStore(s => s.setEdges);
+  const onNodesChange = useFlowsheetStore(s => s.onNodesChange);
+  const onEdgesChange = useFlowsheetStore(s => s.onEdgesChange);
+  const setComponents = useFlowsheetStore(s => s.setComponents);
+  const setResult = useFlowsheetStore(s => s.setResult);
+  const setLoading = useFlowsheetStore(s => s.setLoading);
+  const updateNodeData = useFlowsheetStore(s => s.updateNodeData);
+  const loadFlowsheet = useFlowsheetStore(s => s.loadFlowsheet);
+  const resetFlowsheet = useFlowsheetStore(s => s.reset);
+
+  useEffect(() => {
+    if (!hasSavedFlowsheet && savedState)
+      loadFlowsheet(savedState);
+  }, []);
+  
   const [hoveredEdge, setHoveredEdge] = useState<{id: string, x: number, y: number} | null>(null);
-  const [result, setResult] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [components, setComponents] = useState<string[]>(savedState?.components ?? ['water', 'ethanol']);
+  const [showResumePrompt, setShowResumePrompt] = useState(hasSavedFlowsheet);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { screenToFlowPosition, fitView } = useReactFlow();
@@ -30,6 +50,7 @@ export default function App() {
   });
   
   useEffect(() => {
+    if (showResumePrompt) return;
     const state = {
         version: '1.0',
         nodes,
@@ -37,18 +58,27 @@ export default function App() {
         components,
     };
     localStorage.setItem('rachford_flowsheet', JSON.stringify(state));
-  }, [nodes, edges, components]);
+  }, [nodes, edges, components, showResumePrompt]);
 
   useEffect(() => {
     localStorage.setItem('rachford_units', JSON.stringify(unitSettings));
   }, [unitSettings]);
 
   const onNew = () => {
-    setNodes([]);
-    setEdges([]);
-    setResult(null);
+    resetFlowsheet()
     fileHandleRef.current = null;
     localStorage.removeItem('rachford_flowsheet');
+  };
+
+  const onResumeFlowsheet = () => {
+    if (savedState)
+      loadFlowsheet(savedState);
+    setShowResumePrompt(false);
+  };
+
+  const onStartFresh = () => {
+    localStorage.removeItem('rachford_flowsheet');
+    setShowResumePrompt(false);
   };
 
   const fileHandleRef = useRef<any>(null);
@@ -98,9 +128,7 @@ export default function App() {
     reader.onload = (ev) => {
         try {
           const state = JSON.parse(ev.target?.result as string);
-          setNodes(state.nodes ?? []);
-          setEdges(state.edges ?? []);
-          setComponents(state.components ?? ['water', 'ethanol']);
+          loadFlowsheet(state);
           setResult(null);
           toast.success('Flowsheet loaded');
         } catch {
@@ -233,8 +261,8 @@ export default function App() {
   }, []);
 
   const onNodeDataChange = useCallback((id: string, newData: Record<string, unknown>) => {
-    setNodes(nds => nds.map(n => n.id === id ? { ...n, data: { ...n.data, ...newData } } : n));
-  }, [setNodes]);
+    updateNodeData(id, newData);
+  }, [updateNodeData]);
 
   const onEdgeMouseEnter = useCallback((_: React.MouseEvent, edge: Edge) => {
     const el = document.querySelector(`[data-id="${edge.id}"]`);
@@ -267,6 +295,34 @@ export default function App() {
 
   return (
     <Layout onRun={runSimulation} onNew={onNew} onSave={onSave} onSaveAs={onSaveAs} onLoad={onLoad} onFitView={fitView} result={result} loading={loading} components={components} onComponentsChange={setComponents} selectedNode={selectedNode} onNodeDataChange={onNodeDataChange} unitSettings={unitSettings} onUnitSettingsChange={setUnitSettings}>
+      {showResumePrompt && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000
+        }}>
+          <div style={{
+            background: '#1e293b', border: '1px solid #334155', borderRadius: 8,
+            padding: '24px 28px', width: 360, boxShadow: '0 8px 24px rgba(0,0,0,0.6)'
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#e2e8f0', marginBottom: 8 }}>
+              Resume previous flowsheet?
+            </div>
+            <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 20, lineHeight: 1.5 }}>
+              A flowsheet was found saved in this browser. If this is a shared computer, you may want to start fresh instead.
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={onStartFresh} style={{
+                padding: '7px 14px', borderRadius: 6, border: '1px solid #334155',
+                background: 'transparent', color: '#e2e8f0', fontSize: 12.5, cursor: 'pointer'
+              }}>Start Fresh</button>
+              <button onClick={onResumeFlowsheet} style={{
+                padding: '7px 14px', borderRadius: 6, border: 'none',
+                background: '#3b82f6', color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer'
+              }}>Resume</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div ref={reactFlowWrapper} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}
         onDragOver = {onDragOver}
         onDrop = {onDrop}>

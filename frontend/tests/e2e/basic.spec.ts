@@ -39,3 +39,40 @@ test('Tools menu opens Units Settings modal', async ({ page }) => {
     await page.click('text=Units Settings');
     await expect(page.locator('text=Molar Flow')).toBeVisible();
 });
+
+test('Resume prompt appears after reload when a flowsheet is saved, and Resume restores it', async ({ page }) => {
+    await navigateTo(page);
+    await page.evaluate(() => {
+        localStorage.setItem('rachford_flowsheet', JSON.stringify({
+            version: '1.0',
+            nodes: [{ id: 'feed-1', type: 'unitOp', position: { x: 100, y: 100 }, data: { label: 'F1', nodeType: 'feed' } }],
+            edges: [],
+            components: ['water', 'ethanol'],
+        }));
+    });
+    await page.reload();
+    await expect(page.locator('text=Resume previous flowsheet?')).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Resume', exact: true }).click();
+    await expect(page.locator('text=Resume previous flowsheet?')).not.toBeVisible();
+    await expect(page.locator('text=F1')).toBeVisible();
+});
+
+test('Start Fresh clears the saved flowsheet and no prompt appears on next reload', async ({ page }) => {
+    await navigateTo(page);
+    await page.evaluate(() => {
+        localStorage.setItem('rachford_flowsheet', JSON.stringify({
+            version: '1.0',
+            nodes: [{ id: 'feed-1', type: 'unitOp', position: { x: 100, y: 100 }, data: { label: 'F1', nodeType: 'feed' } }],
+            edges: [],
+            components: ['water', 'ethanol'],
+        }));
+    });
+    await page.reload();
+    await expect(page.locator('text=Resume previous flowsheet?')).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Start Fresh' }).click();
+    await expect(page.locator('text=Resume previous flowsheet?')).not.toBeVisible();
+    await expect(page.locator('text=F1')).not.toBeVisible();
+
+    await page.reload();
+    await expect(page.locator('text=Resume previous flowsheet?')).not.toBeVisible({ timeout: 5000 });
+});

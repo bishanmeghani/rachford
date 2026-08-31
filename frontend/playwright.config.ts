@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const baseURL = (globalThis as any).process?.env?.['BASE_URL'] ?? 'https://effective-goldfish-6v7jx659x7xf5rpq-5173.app.github.dev';
+const baseURL = (globalThis as any).process?.env?.['BASE_URL'] ?? 'http://localhost:5173';
 
 export default defineConfig({
     testDir: './tests/e2e',
