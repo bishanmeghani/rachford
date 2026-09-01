@@ -116,20 +116,24 @@ export class HeatExchanger {
     }
 }
 
+export function computeKValues(componentIds: string[], targetT: number, targetP: number): Record<string, number> {
+    const P_mmHg = targetP / 133.322;
+    const T_celsius = targetT - 273.15;
+    const K: Record<string, number> = {};
+    for (const c of componentIds) {
+        const comp = COMPONENTS_DB[c];
+        if (!comp) throw new Error(`Missing data for ${c}`);
+        const logPsat = comp.antoine.A - comp.antoine.B / (T_celsius + comp.antoine.C);
+        K[c] = Math.pow(10, logPsat) / P_mmHg;
+    }
+    return K;
+}
+
 export class FlashDrum {
     static flashTP(stream: Stream, targetT: number, targetP: number): { vaporStream: Stream; liquidStream: Stream; vaporFraction: number } {
-        const P_mmHg = targetP / 133.322;
-        const T_celsius = targetT - 273.15;
         const z = stream.molarComposition;
         const components = Object.keys(z);
-
-        const K: Record<string, number> = {};
-        for (const c of components) {
-            const comp = COMPONENTS_DB[c];
-            if (!comp) throw new Error(`Missing data for ${c}`);
-            const logPsat = comp.antoine.A - comp.antoine.B / (T_celsius + comp.antoine.C);
-            K[c] = Math.pow(10, logPsat) / P_mmHg;
-        }
+        const K = computeKValues(components, targetT, targetP);
 
         // Rachford-Rice function
         const RR = (psi: number) => components.reduce((s, c) => s + z[c] * (K[c] - 1) / (1 + psi * (K[c] - 1)), 0);

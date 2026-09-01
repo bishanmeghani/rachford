@@ -1,4 +1,4 @@
-import { Stream, FlowsheetNode, FlowsheetEdge } from '../types/types.ts';
+import { Stream, FlowsheetNode, FlowsheetEdge, NodeResultMap } from '../types/types.ts';
 import { executeFlowsheet } from './topology.ts';
 
 export type StreamMap = Record<string, Stream>;
@@ -42,14 +42,14 @@ export function executeWithRecycle(
     nodes: FlowsheetNode[], 
     edges: FlowsheetEdge[], 
     components: string[]
-): { streams: StreamMap; log: string[]; converged: boolean; iterations: number } {
+): { streams: StreamMap; log: string[]; converged: boolean; iterations: number; nodeResults: NodeResultMap } {
     const log: string[] = [];
     const tearEdgeIds = findTearStreams(nodes, edges);
 
     if (tearEdgeIds.size === 0) {
         log.push('No recycle loops detected — running linear solver');
-        const { streams, log: linLog } = executeFlowsheet(nodes, edges, components);
-        return { streams, log: [...log, ...linLog ], converged: true, iterations: 1 }
+        const { streams, log: linLog, nodeResults } = executeFlowsheet(nodes, edges, components);
+        return { streams, log: [...log, ...linLog ], converged: true, iterations: 1, nodeResults}
     }
 
     log.push(`Deteched ${tearEdgeIds.size} tear stream(s): ${[...tearEdgeIds].join(', ')}`);
@@ -83,13 +83,15 @@ export function executeWithRecycle(
     const prevOutputs: Record<string, { molarFlow: number; comp: Record<string, number> }> = {};
 
     let allStreams: StreamMap = {};
+    let allNodeResults: NodeResultMap = {};
     let converged = false;
     let iter = 0;
 
     for (iter = 1; iter <= maxIterations; iter++) {
-        const { streams, log: iterLog } = executeFlowsheet(nodes, edges, components, { ...tearGuesses }, dagEdges);
+        const { streams, log: iterLog, nodeResults } = executeFlowsheet(nodes, edges, components, { ...tearGuesses }, dagEdges);
         log.push(...iterLog);
         allStreams = streams;
+        allNodeResults = nodeResults;
 
         const tearOutputs: StreamMap = {};
         for (const te of tearEdges) {
@@ -190,12 +192,13 @@ export function executeWithRecycle(
     }
     
     if (converged) {
-        const { streams: finalStreams } = executeFlowsheet(nodes, edges, components, { ...tearGuesses }, dagEdges);
+        const { streams: finalStreams, nodeResults: finalNodeResults } = executeFlowsheet(nodes, edges, components, { ...tearGuesses }, dagEdges);
         allStreams = finalStreams;
+        allNodeResults = finalNodeResults;
         for (const te of tearEdges) {
             if (!allStreams[te.id]) allStreams[te.id] = tearGuesses[te.id];
         }
     }
 
-    return { streams: allStreams, log, converged, iterations: iter };
+    return { streams: allStreams, log, converged, iterations: iter, nodeResults: allNodeResults };
 }

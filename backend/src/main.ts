@@ -19,9 +19,9 @@ Deno.serve(async (req) => {
         try {
             const body = await req.json();
             const { nodes, edges, components } = body;
-            const { streams, log, converged, iterations } = executeWithRecycle(nodes as FlowsheetNode[], edges as FlowsheetEdge[], components as string[]);
+            const { streams, log, converged, iterations, nodeResults } = executeWithRecycle(nodes as FlowsheetNode[], edges as FlowsheetEdge[], components as string[]);
             
-            return new Response(JSON.stringify({ status: converged ? "Success" : "NotConverged", iterations, streams, log, }, null, 2), { headers: corsHeaders });
+            return new Response(JSON.stringify({ status: converged ? "Success" : "NotConverged", iterations, streams, log, nodeResults }, null, 2), { headers: corsHeaders });
             
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);

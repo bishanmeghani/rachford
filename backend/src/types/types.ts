@@ -31,3 +31,7 @@ export interface Flowsheet {
     edges: FlowsheetEdge[];
     components: string[];
 }
+
+export type NodeResult = Record<string, unknown>;
+
+export type NodeResultMap = Record<string, NodeResult>;
