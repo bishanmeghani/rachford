@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import type { Node, Edge, NodeChange, EdgeChange } from '@xyflow/react';
+import { DEFAULT_UNITS, type UnitSettings } from '../data/unitsDatabase';
 
 export interface FlowsheetState {
   nodes: Node[];
@@ -8,6 +9,7 @@ export interface FlowsheetState {
   components: string[];
   result: string | null;
   loading: boolean;
+  unitSettings: UnitSettings;
 
   setNodes: (update: Node[] | ((nodes: Node[]) => Node[])) => void;
   setEdges: (update: Edge[] | ((edges: Edge[]) => Edge[])) => void;
@@ -17,6 +19,7 @@ export interface FlowsheetState {
   setComponents: (update: string[] | ((components: string[]) => string[])) => void;
   setResult: (result: string | null) => void;
   setLoading: (loading: boolean) => void;
+  setUnitSettings: (update: UnitSettings | ((s: UnitSettings) => UnitSettings)) => void;
 
   updateNodeData: (id: string, newData: Record<string, unknown>) => void;
 
@@ -24,12 +27,18 @@ export interface FlowsheetState {
   reset: () => void;
 }
 
+const initialUnitSettings: UnitSettings = (() => {
+  try { return JSON.parse(localStorage.getItem('rachford_units') ?? 'null') ?? DEFAULT_UNITS; }
+  catch { return DEFAULT_UNITS; }
+})();
+
 export const useFlowsheetStore = create<FlowsheetState>((set) => ({
   nodes: [],
   edges: [],
   components: ['water', 'ethanol'],
   result: null,
   loading: false,
+  unitSettings: initialUnitSettings,
 
   setNodes: (update) =>
     set((state) => ({
@@ -50,7 +59,12 @@ export const useFlowsheetStore = create<FlowsheetState>((set) => ({
     })),
   setResult: (result) => set({ result }),
   setLoading: (loading) => set({ loading }),
-
+  setUnitSettings: (update) =>
+    set((state) => {
+      const next = typeof update === 'function' ? update(state.unitSettings) : update;
+      localStorage.setItem('rachford_units', JSON.stringify(next));
+      return { unitSettings: next };
+    }),
   updateNodeData: (id, newData) =>
     set((state) => ({
       nodes: state.nodes.map((n) =>

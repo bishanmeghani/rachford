@@ -4,7 +4,7 @@ import type { Connection, Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import Layout from './components/Layout';
 import UnitOpNode from './nodes/UnitOpNode';
-import { DEFAULT_UNITS, type UnitSettings, fromSI } from './data/unitsDatabase';
+import { fromSI } from './data/unitsDatabase';
 import toast from 'react-hot-toast';
 import { useFlowsheetStore } from './store/flowsheetStore';
 
@@ -44,10 +44,8 @@ export default function App() {
   const { screenToFlowPosition, fitView } = useReactFlow();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const selectedNode = nodes.find(n => n.id === selectedNodeId) ?? null;
-  const [unitSettings, setUnitSettings] = useState<UnitSettings>(() => {
-    try { return JSON.parse(localStorage.getItem('rachford_units') ?? 'null') ?? DEFAULT_UNITS; }
-    catch { return DEFAULT_UNITS; }
-  });
+  const unitSettings = useFlowsheetStore(s => s.unitSettings);
+  const setUnitSettings = useFlowsheetStore(s => s.setUnitSettings);
   
   useEffect(() => {
     if (showResumePrompt) return;
@@ -59,10 +57,6 @@ export default function App() {
     };
     localStorage.setItem('rachford_flowsheet', JSON.stringify(state));
   }, [nodes, edges, components, showResumePrompt]);
-
-  useEffect(() => {
-    localStorage.setItem('rachford_units', JSON.stringify(unitSettings));
-  }, [unitSettings]);
 
   const onNew = () => {
     resetFlowsheet()
