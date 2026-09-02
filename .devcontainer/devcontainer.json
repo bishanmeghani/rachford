@@ -1,0 +1,16 @@
+{
+    "name": "Rachford Dev",
+    "image": "mcr.microsoft.com/devcontainers/javascript-node:20",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    },
+    "postCreateCommand": "curl -fsSL https://deno.land/install.sh | sh && echo 'export PATH=\"$HOME/.deno/bin:$PATH\"' >> ~/.bashrc && export PATH=\"$HOME/.deno/bin:$PATH\" && cd frontend && npm install && npx playwright install --with-deps chromium",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "denoland.vscode-deno",
+                "dbaeumer.vscode-eslint"
+            ]
+        }
+    }
+}
